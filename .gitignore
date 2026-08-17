@@ -1,0 +1,11 @@
+node_modules/
+.env
+.GOPAY_SESI_JANGAN_DIHAPUS.json
+.GOPAY_QRIS_STORE.json
+.gopay_session.json
+.gopay_cache.json
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store

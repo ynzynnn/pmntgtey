@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  gopay-gateway:
+    build: .
+    container_name: gopay-merchant-gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    volumes:
+      - ./.env:/app/.env
+      - ./.GOPAY_SESI_JANGAN_DIHAPUS.json:/app/.GOPAY_SESI_JANGAN_DIHAPUS.json

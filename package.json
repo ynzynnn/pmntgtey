@@ -1,0 +1,29 @@
+{
+  "name": "gopay-merchant-gateway",
+  "version": "1.0.0",
+  "description": "GoPay Partner / GoBiz Payment Gateway & Dynamic QRIS Generator (EMVCo)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "login": "node login.js",
+    "test": "node test_all_apis.js"
+  },
+  "keywords": [
+    "gopay",
+    "gobiz",
+    "qris",
+    "payment-gateway",
+    "emvco",
+    "crc16"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
+  }
+}
