@@ -135,15 +135,24 @@ ufw allow 'Nginx Full'
 ufw allow 22/tcp
 ufw --force enable
 
-# 8. Pasang SSL Let's Encrypt Otomatis
+# 8. Pasang SSL Let's Encrypt Otomatis (dengan Auto-Detection Akun Let's Encrypt)
 echo -e "\n${BLUE}⏳ [6/6] Memasang Sertifikat SSL Gratis (Let's Encrypt)...${NC}"
 echo -e "${YELLOW}Pastikan DNS A-Record domain '$DOMAIN_NAME' sudah mengarah ke IP VPS ini!${NC}"
 
-if certbot --nginx -d "$DOMAIN_NAME" --non-interactive --agree-tos -m "$SSL_EMAIL" --redirect; then
+ACCOUNT_DIR="/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory"
+ACCOUNT_FLAG=""
+if [ -d "$ACCOUNT_DIR" ]; then
+    DETECTED_ACC=$(ls -1 "$ACCOUNT_DIR" 2>/dev/null | head -n 1)
+    if [ -n "$DETECTED_ACC" ]; then
+        ACCOUNT_FLAG="--account $DETECTED_ACC"
+    fi
+fi
+
+if certbot --nginx -d "$DOMAIN_NAME" --agree-tos -m "$SSL_EMAIL" --redirect $ACCOUNT_FLAG --non-interactive; then
     echo -e "${GREEN}✓ Sertifikat SSL HTTPS berhasil dipasang dan auto-renewal aktif!${NC}"
 else
-    echo -e "${YELLOW}⚠️ Certbot gagal menerbitkan SSL (kemungkinan DNS domain belum mengarah ke IP VPS).${NC}"
-    echo -e "${YELLOW}Gateway tetap berjalan di HTTP. Setelah DNS mengarah, jalankan: sudo bash setup-ssl.sh${NC}"
+    echo -e "${YELLOW}⚠️ Non-interactive Certbot memerlukan pemilihan akun. Menjalankan Certbot interaktif...${NC}"
+    certbot --nginx -d "$DOMAIN_NAME" --agree-tos --redirect || true
 fi
 
 # 9. Jalankan Gateway dengan PM2

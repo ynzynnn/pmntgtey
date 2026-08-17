@@ -63,10 +63,20 @@ ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/$DOMAIN_NAME"
 nginx -t
 systemctl reload nginx
 
+ACCOUNT_DIR="/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory"
+ACCOUNT_FLAG=""
+if [ -d "$ACCOUNT_DIR" ]; then
+    DETECTED_ACC=$(ls -1 "$ACCOUNT_DIR" 2>/dev/null | head -n 1)
+    if [ -n "$DETECTED_ACC" ]; then
+        ACCOUNT_FLAG="--account $DETECTED_ACC"
+    fi
+fi
+
 # Request SSL
-if certbot --nginx -d "$DOMAIN_NAME" --non-interactive --agree-tos -m "$SSL_EMAIL" --redirect; then
+if certbot --nginx -d "$DOMAIN_NAME" --agree-tos -m "$SSL_EMAIL" --redirect $ACCOUNT_FLAG --non-interactive; then
     echo -e "\n${GREEN}✓ SSL HTTPS Berhasil Diaktifkan untuk https://$DOMAIN_NAME/${NC}"
     echo -e "${GREEN}✓ Auto-renewal sertifikat aktif secara otomatis.${NC}\n"
 else
-    echo -e "\n${RED}❌ Gagal memasang SSL. Pastikan DNS A-Record domain '$DOMAIN_NAME' sudah mengarah ke IP server ini.${NC}\n"
+    echo -e "${YELLOW}⚠️ Menjalankan Certbot interaktif untuk memilih akun...${NC}"
+    certbot --nginx -d "$DOMAIN_NAME" --agree-tos --redirect || true
 fi
