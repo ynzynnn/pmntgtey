@@ -376,22 +376,22 @@ app.get('/', (req, res) => {
 <title>SeptaCloud Payment Gateway</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#09090b;color:#fafafa;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;-webkit-font-smoothing:antialiased}
-.logo{font-size:48px;margin-bottom:24px}
-h1{font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:8px;background:linear-gradient(135deg,#fff 0%,#a78bfa 50%,#7c3aed 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.sub{font-size:15px;color:#71717a;max-width:420px;line-height:1.6;margin-bottom:32px}
-.status{display:inline-flex;align-items:center;gap:8px;background:#111113;border:1px solid #1e1e24;border-radius:100px;padding:8px 20px;font-size:13px;color:#a1a1aa}
-.dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px #22c55e80}
-.footer{position:fixed;bottom:0;width:100%;padding:16px;text-align:center;font-size:11px;color:#3f3f46;border-top:1px solid #1e1e24}
-@media(max-width:640px){h1{font-size:22px}.sub{font-size:14px}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px 16px}
+.card{width:100%;max-width:380px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:32px 24px;text-align:center}
+h1{font-size:20px;font-weight:700;color:#111;margin-bottom:8px}
+p{font-size:13px;color:#666;line-height:1.5;margin-bottom:20px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#16a34a;background:#f0fdf4;border:1px solid #bbf7d0;padding:4px 12px;border-radius:20px;font-weight:600;margin-bottom:16px}
+.dot{width:6px;height:6px;border-radius:50%;background:#16a34a}
+.note{font-size:12px;color:#999;border-top:1px solid #eee;padding-top:16px}
 </style>
 </head>
 <body>
-<div class="logo">⚡</div>
-<h1>SeptaCloud Payment Gateway</h1>
-<p class="sub">Private QRIS payment processing service.<br>Akses API memerlukan autentikasi.</p>
-<div class="status"><span class="dot"></span> Sistem Operasional</div>
-<footer class="footer">&copy; ${new Date().getFullYear()} SeptaCloud</footer>
+<div class="card">
+    <div class="badge"><span class="dot"></span> Sistem Aktif</div>
+    <h1>SeptaCloud Gateway</h1>
+    <p>Layanan pemrosesan pembayaran QRIS private. Integrasi API khusus merchant terdaftar.</p>
+    <div class="note">&copy; ${new Date().getFullYear()} SeptaCloud &bull; All rights reserved.</div>
+</div>
 </body>
 </html>`);
 });
