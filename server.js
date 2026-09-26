@@ -510,6 +510,7 @@ app.all('/create-qris', apiKeyAuth, rateLimiter('api-create-qris', 60, 60 * 1000
     const host = req.get('host');
     const protocol = req.protocol;
     const qrImageUrl = `${protocol}://${host}/qr/${qrisId}?format=raw`;
+    const payUrl = `${protocol}://${host}/pay/${qrisId}`;
 
     logActivity('INFO', `QRIS Dinamis dibuat | TRX-ID: ${cleanTrxId} | Nominal: ${formatRupiah(parsedAmount)}${webhookUrl ? ' | Callback: ' + webhookUrl : ''}`);
 
@@ -523,11 +524,237 @@ app.all('/create-qris', apiKeyAuth, rateLimiter('api-create-qris', 60, 60 * 1000
             qris_code: dynamicCode,
             qr_image_url: qrImageUrl,
             qr_image_base64: qrBase64,
+            pay_url: payUrl,
             webhook_url: webhookUrl || null,
             expires_at: expiresAt.toISOString(),
             expires_in_seconds: 300
         }
     });
+});
+
+// ==========================================
+// 4. HALAMAN PEMBAYARAN CHECKOUT (/pay/:id)
+// ==========================================
+
+app.get('/pay/:id', (req, res) => {
+    const qrisId = req.params.id;
+    const qrisItem = qrisStore.get(qrisId);
+
+    if (!qrisItem) {
+        return res.status(404).json({ success: false, message: 'QRIS ID tidak ditemukan atau sudah kedaluwarsa.' });
+    }
+
+    const now = Date.now();
+    const remaining = Math.max(0, Math.floor((qrisItem.expiresAt.getTime() - now) / 1000));
+    const amountFormatted = new Intl.NumberFormat('id-ID').format(qrisItem.amount);
+    const qrImageUrl = `${req.protocol}://${req.get('host')}/qr/${qrisId}?format=raw`;
+    const statusUrl = `${req.protocol}://${req.get('host')}/api/qr-status/${qrisId}`;
+
+    if (qrisItem.status === 'PAID') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pembayaran Berhasil</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;display:flex;justify-content:center;min-height:100vh;padding:24px 16px;color:#222}.card{width:100%;max-width:380px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:32px 24px;text-align:center;height:fit-content}.check{width:56px;height:56px;background:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}.check svg{width:28px;height:28px;stroke:#fff;stroke-width:3;fill:none}h2{font-size:18px;font-weight:700;margin-bottom:4px}p{font-size:13px;color:#888}</style></head><body><div class="card"><div class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><h2>Pembayaran Berhasil</h2><p>Rp ${amountFormatted}</p></div></body></html>`);
+    }
+
+    if (qrisItem.status === 'EXPIRED' || remaining <= 0) {
+        qrisItem.status = 'EXPIRED';
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pembayaran Kedaluwarsa</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;display:flex;justify-content:center;min-height:100vh;padding:24px 16px;color:#222}.card{width:100%;max-width:380px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:32px 24px;text-align:center;height:fit-content}h2{font-size:18px;font-weight:700;margin-bottom:4px;color:#dc2626}p{font-size:13px;color:#888}</style></head><body><div class="card"><h2>Waktu Habis</h2><p>Sesi pembayaran QRIS ini sudah kedaluwarsa.</p></div></body></html>`);
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bayar Rp ${amountFormatted}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            color: #222;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px 16px;
+        }
+        .card {
+            width: 100%;
+            max-width: 380px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 28px 24px;
+            text-align: center;
+            height: fit-content;
+        }
+        .label {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 2px;
+        }
+        .amount {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111;
+            margin-bottom: 20px;
+        }
+        .qr-box {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            display: inline-block;
+            margin-bottom: 16px;
+        }
+        .qr-box img {
+            display: block;
+            width: 220px;
+            height: 220px;
+        }
+        .timer {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 16px;
+        }
+        .timer span {
+            font-weight: 600;
+            color: #333;
+        }
+        .info {
+            font-size: 12px;
+            color: #999;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #222;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn:hover { background: #444; }
+        .btn:disabled { background: #ccc; cursor: default; }
+        .msg {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #888;
+            min-height: 16px;
+        }
+        .paid-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .paid-overlay.show { display: flex; }
+        .paid-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 32px 28px;
+            text-align: center;
+            max-width: 320px;
+            width: 90%;
+        }
+        .paid-box .check {
+            width: 48px;
+            height: 48px;
+            background: #16a34a;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+        }
+        .paid-box .check svg {
+            width: 24px;
+            height: 24px;
+            stroke: #fff;
+            stroke-width: 3;
+            fill: none;
+        }
+        .paid-box p {
+            font-size: 15px;
+            font-weight: 600;
+            color: #111;
+        }
+        .paid-box .sub {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+            font-weight: 400;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        ${qrisItem.orderId ? `<div class="label">${qrisItem.orderId}</div>` : ''}
+        <div class="amount">Rp ${amountFormatted}</div>
+
+        <div class="qr-box">
+            <img src="${qrImageUrl}" alt="QRIS" />
+        </div>
+
+        <div class="timer">Sisa waktu: <span id="cd">${String(Math.floor(remaining / 60)).padStart(2,'0')}:${String(remaining % 60).padStart(2,'0')}</span></div>
+
+        <div class="info">
+            Scan QR di atas menggunakan GoPay, DANA, OVO, ShopeePay, BCA Mobile, BRImo, Livin, LinkAja, atau aplikasi bank lainnya.
+        </div>
+
+        <button class="btn" id="btn" onclick="mc()">Cek Status Pembayaran</button>
+        <div class="msg" id="msg"></div>
+    </div>
+
+    <div class="paid-overlay" id="po">
+        <div class="paid-box">
+            <div class="check">
+                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <p>Pembayaran Berhasil</p>
+            <p class="sub">Rp ${amountFormatted}</p>
+        </div>
+    </div>
+
+    <script>
+        let r=${remaining},p=null;
+        function tick(){
+            if(r<=0){document.getElementById('cd').textContent='Habis';document.getElementById('btn').disabled=true;if(p)clearInterval(p);return}
+            document.getElementById('cd').textContent=String(Math.floor(r/60)).padStart(2,'0')+':'+String(r%60).padStart(2,'0');
+            r--;
+        }
+        setInterval(tick,1000);
+
+        async function cs(m){
+            const b=document.getElementById('btn'),g=document.getElementById('msg');
+            if(m){b.disabled=true;b.textContent='Memeriksa...';g.textContent='';}
+            try{
+                const x=await fetch('${statusUrl}');
+                const j=await x.json();
+                if(j.success&&j.paid){
+                    if(p)clearInterval(p);
+                    document.getElementById('po').classList.add('show');
+                }else if(m){
+                    g.textContent='Belum terdeteksi. Pastikan sudah transfer.';
+                    setTimeout(()=>{g.textContent='';},4000);
+                }
+            }catch(e){if(m)g.textContent='Gagal menghubungi server.';}
+            finally{if(m){b.disabled=false;b.textContent='Cek Status Pembayaran';}}
+        }
+        function mc(){cs(true);}
+        p=setInterval(()=>cs(false),6000);
+    </script>
+</body>
+</html>`);
 });
 
 // ==========================================
@@ -542,7 +769,8 @@ app.get('/qr/:id', (req, res) => {
         return res.status(404).json({ success: false, message: 'QRIS ID tidak ditemukan' });
     }
 
-    if (req.query.format === 'raw' || req.query.raw === '1' || req.headers.accept?.includes('image/')) {
+    // ?format=raw → gambar QR mentah (PNG)
+    if (req.query.format === 'raw' || req.query.raw === '1') {
         res.setHeader('Content-Type', 'image/png');
         return QRCode.toFileStream(res, qrisItem.qrisCode, {
             width: 400,
@@ -550,19 +778,26 @@ app.get('/qr/:id', (req, res) => {
         });
     }
 
-    res.json({
-        success: true,
-        data: {
-            qris_id: qrisId,
-            trx_id: qrisItem.trxId,
-            order_id: qrisItem.orderId,
-            amount: qrisItem.amount,
-            status: qrisItem.status,
-            qris_code: qrisItem.qrisCode,
-            qr_image_url: `${req.protocol}://${req.get('host')}/qr/${qrisId}?format=raw`,
-            expires_at: qrisItem.expiresAt.toISOString()
-        }
-    });
+    // ?format=json atau Accept: application/json → response JSON
+    if (req.query.format === 'json' || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
+        return res.json({
+            success: true,
+            data: {
+                qris_id: qrisId,
+                trx_id: qrisItem.trxId,
+                order_id: qrisItem.orderId,
+                amount: qrisItem.amount,
+                status: qrisItem.status,
+                qris_code: qrisItem.qrisCode,
+                qr_image_url: `${req.protocol}://${req.get('host')}/qr/${qrisId}?format=raw`,
+                pay_url: `${req.protocol}://${req.get('host')}/pay/${qrisId}`,
+                expires_at: qrisItem.expiresAt.toISOString()
+            }
+        });
+    }
+
+    // Default (browser) → redirect ke halaman checkout /pay/:id
+    return res.redirect(`/pay/${qrisId}`);
 });
 
 // ==========================================
