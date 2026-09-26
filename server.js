@@ -18,6 +18,7 @@ const qrisHelper = require('./qrisHelper');
 const sessionManager = require('./sessionManager');
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
 const MAX_LOGS = 150;
