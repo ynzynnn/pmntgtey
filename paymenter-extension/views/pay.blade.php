@@ -3,246 +3,242 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pembayaran QRIS Invoice #{{ $invoice->id }} - Rp {{ number_format($total, 0, ',', '.') }}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Bayar Invoice #{{ $invoice->id }}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-color: #0b0f19;
-            color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            color: #222;
             display: flex;
-            align-items: center;
             justify-content: center;
             min-height: 100vh;
-            padding: 16px;
+            padding: 24px 16px;
         }
-        .container {
+        .card {
             width: 100%;
-            max-width: 440px;
-            background: #151d2f;
-            border: 1px solid #23314d;
-            border-radius: 24px;
-            padding: 26px;
-            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
-            text-align: center;
-            position: relative;
-        }
-        .header-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(0, 170, 19, 0.12);
-            color: #00e024;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 6px 14px;
-            border-radius: 100px;
-            margin-bottom: 16px;
-            border: 1px solid rgba(0, 224, 36, 0.25);
-        }
-        .invoice-title {
-            font-size: 14px;
-            color: #94a3b8;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-        .amount-display {
-            font-size: 32px;
-            font-weight: 800;
-            color: #ffffff;
-            letter-spacing: -0.5px;
-            margin-bottom: 16px;
-        }
-        .timer-box {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            background: #1c273e;
-            border: 1px solid #2d3e63;
+            max-width: 380px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
             border-radius: 12px;
-            padding: 10px;
+            padding: 28px 24px;
+            text-align: center;
+            height: fit-content;
+        }
+        .label {
             font-size: 13px;
-            color: #cbd5e1;
-            margin-bottom: 18px;
+            color: #888;
+            margin-bottom: 2px;
         }
-        .timer-value {
+        .amount {
+            font-size: 28px;
             font-weight: 700;
-            color: #f59e0b;
+            color: #111;
+            margin-bottom: 20px;
         }
-        .qr-wrapper {
-            background: #ffffff;
-            border-radius: 18px;
-            padding: 14px;
+        .qr-box {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
             display: inline-block;
             margin-bottom: 16px;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
         }
-        .qr-image {
+        .qr-box img {
             display: block;
-            width: 250px;
-            height: 250px;
-            max-width: 100%;
+            width: 220px;
+            height: 220px;
         }
-        .supported-apps {
-            font-size: 11.5px;
-            color: #64748b;
+        .timer {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 16px;
+        }
+        .timer span {
+            font-weight: 600;
+            color: #333;
+        }
+        .info {
+            font-size: 12px;
+            color: #999;
+            line-height: 1.5;
             margin-bottom: 20px;
-            line-height: 1.4;
         }
-        .btn-check {
+        .btn {
+            display: block;
             width: 100%;
-            background: #00aa13;
-            color: #ffffff;
+            padding: 12px;
+            background: #222;
+            color: #fff;
             border: none;
-            border-radius: 14px;
-            padding: 14px;
-            font-size: 15px;
-            font-weight: 700;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
+        }
+        .btn:hover { background: #444; }
+        .btn:disabled { background: #ccc; cursor: default; }
+        .back {
+            display: block;
+            margin-top: 12px;
+            font-size: 13px;
+            color: #888;
+            text-decoration: none;
+        }
+        .back:hover { color: #222; }
+        .msg {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #888;
+            min-height: 16px;
+        }
+        .msg.ok { color: #16a34a; }
+        .msg.err { color: #dc2626; }
+
+        .paid-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .paid-overlay.show { display: flex; }
+        .paid-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 32px 28px;
+            text-align: center;
+            max-width: 320px;
+            width: 90%;
+        }
+        .paid-box .check {
+            width: 48px;
+            height: 48px;
+            background: #16a34a;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 14px rgba(0, 170, 19, 0.4);
-            text-decoration: none;
+            margin: 0 auto 12px;
         }
-        .btn-check:hover {
-            background: #00c416;
-            transform: translateY(-1px);
+        .paid-box .check svg {
+            width: 24px;
+            height: 24px;
+            stroke: #fff;
+            stroke-width: 3;
+            fill: none;
         }
-        .btn-cancel {
-            display: block;
-            margin-top: 14px;
-            font-size: 12.5px;
-            color: #94a3b8;
-            text-decoration: none;
+        .paid-box p {
+            font-size: 15px;
             font-weight: 600;
+            color: #111;
         }
-        .btn-cancel:hover { color: #fff; }
-        .toast-msg {
-            margin-top: 12px;
+        .paid-box .sub {
             font-size: 12px;
-            color: #f59e0b;
-            min-height: 18px;
+            color: #888;
+            margin-top: 4px;
+            font-weight: 400;
         }
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: #ffffff;
-            animation: spin 0.8s ease-in-out infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header-badge">
-            <span>●</span> QRIS GO-PAY / SEMUA E-WALLET
-        </div>
-        <div class="invoice-title">Invoice #{{ $invoice->id }}</div>
-        <div class="amount-display">Rp {{ number_format($total, 0, ',', '.') }}</div>
+    <div class="card">
+        <div class="label">Invoice #{{ $invoice->id }}</div>
+        <div class="amount">Rp {{ number_format($total, 0, ',', '.') }}</div>
 
-        <div class="timer-box">
-            <span>⏳ Batas Waktu Bayar:</span>
-            <span class="timer-value" id="countdown">05:00</span>
-        </div>
-
-        <div class="qr-wrapper">
+        <div class="qr-box">
             @if($qr_image_base64)
-                <img src="{{ $qr_image_base64 }}" alt="QRIS Code" class="qr-image" />
+                <img src="{{ $qr_image_base64 }}" alt="QRIS" />
             @else
-                <img src="{{ $qr_image_url }}" alt="QRIS Code" class="qr-image" />
+                <img src="{{ $qr_image_url }}" alt="QRIS" />
             @endif
         </div>
 
-        <div class="supported-apps">
-            Bisa di-scan dari <strong>GoPay, BCA Mobile, DANA, OVO, ShopeePay, Mandiri Livin, BRImo, LinkAja</strong>, dan seluruh aplikasi perbankan berstandar QRIS.
+        <div class="timer">Sisa waktu: <span id="countdown">05:00</span></div>
+
+        <div class="info">
+            Scan QR di atas menggunakan GoPay, DANA, OVO, ShopeePay, BCA Mobile, BRImo, Livin, LinkAja, atau aplikasi bank lainnya.
         </div>
 
-        <button id="btnCheckManual" class="btn-check" onclick="checkStatusManual()">
-            <span>🔄 Cek Status Pembayaran</span>
-        </button>
+        <button class="btn" id="btnCheck" onclick="manualCheck()">Cek Status Pembayaran</button>
+        <div class="msg" id="msg"></div>
 
-        <div id="toastMessage" class="toast-msg"></div>
+        <a href="{{ $return_url }}" class="back">Kembali</a>
+    </div>
 
-        <a href="{{ $return_url }}" class="btn-cancel">← Kembali ke Detail Invoice</a>
+    <div class="paid-overlay" id="paidOverlay">
+        <div class="paid-box">
+            <div class="check">
+                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <p>Pembayaran Berhasil</p>
+            <p class="sub">Mengalihkan...</p>
+        </div>
     </div>
 
     <script>
         const qrisId = "{{ $qris_id }}";
         const apiUrl = "{{ $api_url }}";
         const returnUrl = "{{ $return_url }}";
-        let remainingSeconds = 300;
-        let pollInterval = null;
+        let remaining = 300;
+        let poll = null;
 
-        function updateTimer() {
-            if (remainingSeconds <= 0) {
-                document.getElementById('countdown').textContent = 'Kedaluwarsa';
-                document.getElementById('countdown').style.color = '#ef4444';
-                document.getElementById('btnCheckManual').disabled = true;
-                if (pollInterval) clearInterval(pollInterval);
+        function tick() {
+            if (remaining <= 0) {
+                document.getElementById('countdown').textContent = 'Habis';
+                document.getElementById('btnCheck').disabled = true;
+                if (poll) clearInterval(poll);
                 return;
             }
-            const mins = Math.floor(remainingSeconds / 60).toString().padStart(2, '0');
-            const secs = (remainingSeconds % 60).toString().padStart(2, '0');
-            document.getElementById('countdown').textContent = mins + ':' + secs;
-            remainingSeconds--;
+            const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+            const s = String(remaining % 60).padStart(2, '0');
+            document.getElementById('countdown').textContent = m + ':' + s;
+            remaining--;
         }
-        setInterval(updateTimer, 1000);
+        setInterval(tick, 1000);
 
-        async function checkStatus(isManual = false) {
-            const btn = document.getElementById('btnCheckManual');
-            const toast = document.getElementById('toastMessage');
+        async function checkStatus(manual) {
+            const btn = document.getElementById('btnCheck');
+            const msg = document.getElementById('msg');
 
-            if (isManual && btn) {
+            if (manual) {
                 btn.disabled = true;
-                btn.innerHTML = '<span class="spinner"></span> <span>Memeriksa Mutasi...</span>';
-                if (toast) toast.textContent = 'Menghubungi server GoPay...';
+                btn.textContent = 'Memeriksa...';
+                msg.className = 'msg';
+                msg.textContent = '';
             }
 
             try {
-                const res = await fetch(apiUrl + '/api/qr-status/' + qrisId);
-                const json = await res.json();
+                const r = await fetch(apiUrl + '/api/qr-status/' + qrisId);
+                const j = await r.json();
 
-                if (json.success && json.paid) {
-                    if (pollInterval) clearInterval(pollInterval);
-                    if (toast) {
-                        toast.style.color = '#00e024';
-                        toast.textContent = '🎉 Pembayaran Berhasil! Mengalihkan ke invoice...';
-                    }
-                    setTimeout(() => {
-                        window.location.href = returnUrl;
-                    }, 1500);
-                } else {
-                    if (isManual && toast) {
-                        toast.textContent = '⏳ Pembayaran belum terdeteksi. Silakan transfer terlebih dahulu.';
-                        setTimeout(() => { if (toast) toast.textContent = ''; }, 4000);
-                    }
+                if (j.success && j.paid) {
+                    if (poll) clearInterval(poll);
+                    document.getElementById('paidOverlay').classList.add('show');
+                    setTimeout(() => { window.location.href = returnUrl; }, 1500);
+                } else if (manual) {
+                    msg.className = 'msg';
+                    msg.textContent = 'Belum terdeteksi. Pastikan sudah transfer.';
+                    setTimeout(() => { msg.textContent = ''; }, 4000);
                 }
             } catch (e) {
-                if (isManual && toast) toast.textContent = '⚠️ Gagal terhubung ke gateway.';
+                if (manual) {
+                    msg.className = 'msg err';
+                    msg.textContent = 'Gagal menghubungi server.';
+                }
             } finally {
-                if (isManual && btn) {
+                if (manual) {
                     btn.disabled = false;
-                    btn.innerHTML = '<span>🔄 Cek Status Pembayaran</span>';
+                    btn.textContent = 'Cek Status Pembayaran';
                 }
             }
         }
 
-        function checkStatusManual() {
-            checkStatus(true);
-        }
+        function manualCheck() { checkStatus(true); }
 
-        // Auto poll setiap 6 detik
-        pollInterval = setInterval(() => checkStatus(false), 6000);
+        poll = setInterval(() => checkStatus(false), 6000);
     </script>
 </body>
 </html>
