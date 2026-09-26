@@ -450,6 +450,7 @@ app.all('/create-qris', apiKeyAuth, rateLimiter('api-create-qris', 60, 60 * 1000
     const customTrxId = req.body?.trx_id || req.query?.trx_id;
     const orderId = req.body?.order_id || req.query?.order_id || '';
     const webhookUrl = req.body?.webhook_url || req.query?.webhook_url || process.env.WEBHOOK_URL || '';
+    const returnUrl = req.body?.return_url || req.query?.return_url || '';
 
     const parsedAmount = parseInt(amount, 10);
     if (!amount || isNaN(parsedAmount) || parsedAmount < 100 || parsedAmount > 500000000) {
@@ -503,7 +504,8 @@ app.all('/create-qris', apiKeyAuth, rateLimiter('api-create-qris', 60, 60 * 1000
         status: 'PENDING',
         transactionData: null,
         webhookUrl,
-        webhookDelivered: false
+        webhookDelivered: false,
+        returnUrl
     });
 
     saveQRISStoreToDisk();
@@ -550,10 +552,11 @@ app.get('/pay/:id', (req, res) => {
     const amountFormatted = new Intl.NumberFormat('id-ID').format(qrisItem.amount);
     const qrImageUrl = `${req.protocol}://${req.get('host')}/qr/${qrisId}?format=raw`;
     const statusUrl = `${req.protocol}://${req.get('host')}/api/qr-status/${qrisId}`;
+    const returnUrl = qrisItem.returnUrl || '';
 
     if (qrisItem.status === 'PAID') {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pembayaran Berhasil</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;display:flex;justify-content:center;min-height:100vh;padding:24px 16px;color:#222}.card{width:100%;max-width:380px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:32px 24px;text-align:center;height:fit-content}.check{width:56px;height:56px;background:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}.check svg{width:28px;height:28px;stroke:#fff;stroke-width:3;fill:none}h2{font-size:18px;font-weight:700;margin-bottom:4px}p{font-size:13px;color:#888}</style></head><body><div class="card"><div class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><h2>Pembayaran Berhasil</h2><p>Rp ${amountFormatted}</p></div></body></html>`);
+        return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pembayaran Berhasil</title>${returnUrl ? `<meta http-equiv="refresh" content="2;url=${returnUrl}">` : ''}<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;display:flex;justify-content:center;min-height:100vh;padding:24px 16px;color:#222}.card{width:100%;max-width:380px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:32px 24px;text-align:center;height:fit-content}.check{width:56px;height:56px;background:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}.check svg{width:28px;height:28px;stroke:#fff;stroke-width:3;fill:none}h2{font-size:18px;font-weight:700;margin-bottom:4px}p{font-size:13px;color:#888}</style></head><body><div class="card"><div class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><h2>Pembayaran Berhasil</h2><p>Rp ${amountFormatted}</p>${returnUrl ? '<p style="margin-top:8px">Mengalihkan...</p>' : ''}</div>${returnUrl ? `<script>setTimeout(function(){window.location.href='${returnUrl}'},2000)</script>` : ''}</body></html>`);
     }
 
     if (qrisItem.status === 'EXPIRED' || remaining <= 0) {
@@ -723,6 +726,7 @@ app.get('/pay/:id', (req, res) => {
             </div>
             <p>Pembayaran Berhasil</p>
             <p class="sub">Rp ${amountFormatted}</p>
+            ${returnUrl ? '<p class="sub" style="margin-top:4px">Mengalihkan ke invoice...</p>' : ''}
         </div>
     </div>
 
@@ -735,6 +739,7 @@ app.get('/pay/:id', (req, res) => {
         }
         setInterval(tick,1000);
 
+        let ru='${returnUrl}';
         async function cs(m){
             const b=document.getElementById('btn'),g=document.getElementById('msg');
             if(m){b.disabled=true;b.textContent='Memeriksa...';g.textContent='';}
@@ -744,6 +749,7 @@ app.get('/pay/:id', (req, res) => {
                 if(j.success&&j.paid){
                     if(p)clearInterval(p);
                     document.getElementById('po').classList.add('show');
+                    if(ru){setTimeout(function(){window.location.href=ru;},2000);}
                 }else if(m){
                     g.textContent='Belum terdeteksi. Pastikan sudah transfer.';
                     setTimeout(()=>{g.textContent='';},4000);
