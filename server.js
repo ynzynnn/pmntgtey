@@ -361,186 +361,37 @@ function isValidWebhookUrl(urlStr) {
 
 app.get('/', (req, res) => {
     const session = sessionManager.loadSession();
-    const merchantName = session?.merchant_name || 'SEPTACLOUD, Digital & Kreatif';
-    const merchantId = session?.merchant_id || 'G010890245';
-    const uptime = Math.floor(process.uptime());
-    const uptimeStr = uptime >= 3600
-        ? `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`
-        : `${Math.floor(uptime/60)}m ${uptime%60}s`;
 
-    // API clients get JSON
+    // JSON hanya untuk client dengan API Key
     if (req.query.format === 'json' || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
-        return res.json({
-            service: 'GoPay Partner & Merchant API Gateway',
-            status: 'RUNNING',
-            version: '1.0.0',
-            merchant_name: merchantName,
-            merchant_id: merchantId,
-            features: {
-                dynamic_qris: true,
-                realtime_detection: true,
-                automated_webhook_callback: true,
-                hmac_sha256_signature: true
-            },
-            endpoints: {
-                create_qris: 'POST /create-qris',
-                check_payment: 'POST /check-payment',
-                qr_status: 'GET /api/qr-status/:qris_id',
-                pay_page: 'GET /pay/:qris_id',
-                transactions: 'GET /transactions',
-                health: 'GET /health',
-                token_status: 'GET /token-status'
-            }
-        });
+        return res.json({ service: 'Payment Gateway API', status: 'RUNNING', version: '1.0.0' });
     }
 
-    // Browser gets landing page
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SeptaCloud Payment Gateway — QRIS API</title>
+<title>SeptaCloud Payment Gateway</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#09090b;color:#fafafa;-webkit-font-smoothing:antialiased}
-a{color:#a78bfa;text-decoration:none}
-a:hover{text-decoration:underline}
-code{font-family:'SF Mono',Consolas,monospace;font-size:13px}
-
-.nav{border-bottom:1px solid #1e1e24;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;max-width:1080px;margin:0 auto}
-.nav-brand{font-weight:700;font-size:15px;color:#fff;display:flex;align-items:center;gap:8px}
-.nav-badge{font-size:11px;background:#16a34a;color:#fff;padding:2px 8px;border-radius:100px;font-weight:600}
-.nav-links{display:flex;gap:16px;font-size:13px;color:#a1a1aa}
-.nav-links a{color:#a1a1aa}
-.nav-links a:hover{color:#fff}
-
-.hero{max-width:1080px;margin:0 auto;padding:64px 24px 48px;text-align:center}
-.hero h1{font-size:42px;font-weight:800;letter-spacing:-1.5px;line-height:1.1;margin-bottom:12px;background:linear-gradient(135deg,#fff 0%,#a78bfa 50%,#7c3aed 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero p{font-size:17px;color:#a1a1aa;max-width:560px;margin:0 auto 32px;line-height:1.6}
-.hero-stats{display:flex;justify-content:center;gap:40px;margin-bottom:40px}
-.stat{text-align:center}
-.stat .val{font-size:22px;font-weight:700;color:#fff}
-.stat .lbl{font-size:12px;color:#71717a;margin-top:2px}
-
-.cards{max-width:1080px;margin:0 auto;padding:0 24px 48px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
-.card{background:#111113;border:1px solid #1e1e24;border-radius:12px;padding:24px}
-.card h3{font-size:14px;font-weight:700;margin-bottom:12px;color:#e4e4e7}
-.card-tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-right:6px}
-.tag-post{background:#7c3aed22;color:#a78bfa}
-.tag-get{background:#16a34a22;color:#4ade80}
-
-.endpoint{margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #1e1e24}
-.endpoint:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
-.ep-path{font-size:13px;font-weight:600;color:#d4d4d8;margin-bottom:4px}
-.ep-desc{font-size:12px;color:#71717a;line-height:1.4}
-
-.code-section{max-width:1080px;margin:0 auto;padding:0 24px 48px}
-.code-section h2{font-size:18px;font-weight:700;margin-bottom:16px;color:#e4e4e7}
-.code-block{background:#111113;border:1px solid #1e1e24;border-radius:12px;padding:20px;overflow-x:auto}
-.code-block pre{color:#a1a1aa;font-size:13px;line-height:1.7}
-.code-block .cm{color:#525264}
-.code-block .str{color:#a78bfa}
-.code-block .key{color:#4ade80}
-
-.info-bar{max-width:1080px;margin:0 auto;padding:0 24px 48px}
-.info-row{background:#111113;border:1px solid #1e1e24;border-radius:12px;padding:20px 24px;display:flex;flex-wrap:wrap;gap:32px}
-.info-item .il{font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px}
-.info-item .iv{font-size:14px;font-weight:600;color:#d4d4d8}
-
-.footer{border-top:1px solid #1e1e24;padding:24px;text-align:center;font-size:12px;color:#52525b}
-
-@media(max-width:640px){
-    .hero h1{font-size:28px}
-    .hero p{font-size:15px}
-    .hero-stats{gap:20px}
-    .stat .val{font-size:18px}
-    .info-row{flex-direction:column;gap:16px}
-}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#09090b;color:#fafafa;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;-webkit-font-smoothing:antialiased}
+.logo{font-size:48px;margin-bottom:24px}
+h1{font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:8px;background:linear-gradient(135deg,#fff 0%,#a78bfa 50%,#7c3aed 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sub{font-size:15px;color:#71717a;max-width:420px;line-height:1.6;margin-bottom:32px}
+.status{display:inline-flex;align-items:center;gap:8px;background:#111113;border:1px solid #1e1e24;border-radius:100px;padding:8px 20px;font-size:13px;color:#a1a1aa}
+.dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px #22c55e80}
+.footer{position:fixed;bottom:0;width:100%;padding:16px;text-align:center;font-size:11px;color:#3f3f46;border-top:1px solid #1e1e24}
+@media(max-width:640px){h1{font-size:22px}.sub{font-size:14px}}
 </style>
 </head>
 <body>
-
-<nav class="nav">
-    <div class="nav-brand">
-        <span>⚡ SeptaCloud Gateway</span>
-        <span class="nav-badge">LIVE</span>
-    </div>
-    <div class="nav-links">
-        <a href="/health">Status</a>
-        <a href="/?format=json">API JSON</a>
-    </div>
-</nav>
-
-<section class="hero">
-    <h1>QRIS Payment Gateway API</h1>
-    <p>REST API untuk membuat QRIS dinamis, deteksi pembayaran real-time, dan webhook callback otomatis. Terima pembayaran dari GoPay, DANA, OVO, ShopeePay, dan seluruh e-wallet & m-banking berstandar QRIS.</p>
-    <div class="hero-stats">
-        <div class="stat"><div class="val">&lt; 7s</div><div class="lbl">Deteksi Pembayaran</div></div>
-        <div class="stat"><div class="val">HMAC-SHA256</div><div class="lbl">Webhook Signature</div></div>
-        <div class="stat"><div class="val">${uptimeStr}</div><div class="lbl">Uptime</div></div>
-    </div>
-</section>
-
-<section class="cards">
-    <div class="card">
-        <h3>Pembayaran</h3>
-        <div class="endpoint">
-            <div class="ep-path"><span class="card-tag tag-post">POST</span><code>/create-qris</code></div>
-            <div class="ep-desc">Buat QRIS dinamis dengan nominal spesifik. Mengembalikan QR code, pay URL, dan QRIS ID untuk tracking.</div>
-        </div>
-        <div class="endpoint">
-            <div class="ep-path"><span class="card-tag tag-post">POST</span><code>/check-payment</code></div>
-            <div class="ep-desc">Cek mutasi GoBiz berdasarkan nominal dan trx_id. Cocok untuk server-to-server verification.</div>
-        </div>
-    </div>
-    <div class="card">
-        <h3>Status & Monitoring</h3>
-        <div class="endpoint">
-            <div class="ep-path"><span class="card-tag tag-get">GET</span><code>/api/qr-status/:id</code></div>
-            <div class="ep-desc">Cek status pembayaran QRIS secara real-time. Digunakan untuk polling dari halaman checkout.</div>
-        </div>
-        <div class="endpoint">
-            <div class="ep-path"><span class="card-tag tag-get">GET</span><code>/pay/:id</code></div>
-            <div class="ep-desc">Halaman checkout pembayaran QRIS. Redirect pembeli ke sini untuk scan & bayar.</div>
-        </div>
-        <div class="endpoint">
-            <div class="ep-path"><span class="card-tag tag-get">GET</span><code>/health</code></div>
-            <div class="ep-desc">Status server, sesi merchant, dan uptime.</div>
-        </div>
-    </div>
-</section>
-
-<section class="code-section">
-    <h2>Quick Start</h2>
-    <div class="code-block"><pre><span class="cm"># Buat QRIS Dinamis Rp 50.000</span>
-curl -X POST <span class="str">${req.protocol}://${req.get('host')}/create-qris</span> \\
-  -H <span class="str">"Content-Type: application/json"</span> \\
-  -H <span class="str">"X-Api-Key: YOUR_API_KEY"</span> \\
-  -d '{
-    <span class="key">"amount"</span>: <span class="str">50000</span>,
-    <span class="key">"order_id"</span>: <span class="str">"INV-001"</span>,
-    <span class="key">"webhook_url"</span>: <span class="str">"https://yoursite.com/webhook"</span>,
-    <span class="key">"return_url"</span>: <span class="str">"https://yoursite.com/invoice/1"</span>
-  }'
-
-<span class="cm"># Response berisi pay_url → redirect pembeli ke sana</span>
-<span class="cm"># Webhook otomatis dikirim saat pembayaran masuk</span></pre>
-    </div>
-</section>
-
-<section class="info-bar">
-    <div class="info-row">
-        <div class="info-item"><div class="il">Merchant</div><div class="iv">${merchantName}</div></div>
-        <div class="info-item"><div class="il">Merchant ID</div><div class="iv">${merchantId}</div></div>
-        <div class="info-item"><div class="il">Sesi GoBiz</div><div class="iv">${session ? '🟢 Terhubung' : '🔴 Belum Login'}</div></div>
-        <div class="info-item"><div class="il">Server</div><div class="iv">${req.protocol}://${req.get('host')}</div></div>
-    </div>
-</section>
-
-<footer class="footer">SeptaCloud Payment Gateway &copy; ${new Date().getFullYear()} — Powered by GoBiz QRIS</footer>
-
+<div class="logo">⚡</div>
+<h1>SeptaCloud Payment Gateway</h1>
+<p class="sub">Private QRIS payment processing service.<br>Akses API memerlukan autentikasi.</p>
+<div class="status"><span class="dot"></span> Sistem Operasional</div>
+<footer class="footer">&copy; ${new Date().getFullYear()} SeptaCloud</footer>
 </body>
 </html>`);
 });
