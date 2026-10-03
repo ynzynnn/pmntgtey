@@ -406,11 +406,32 @@ async function fetchTransactions({ startTime, endTime, pageSize = 20, merchantId
         params.merchant_ids = targetMerchantId;
     }
 
-    const response = await axios.get(GOJEK_TRANSACTIONS_URL, {
-        headers: activeHeaders,
-        params,
-        timeout: 12000
-    });
+    let response;
+    try {
+        response = await axios.get(GOJEK_TRANSACTIONS_URL, {
+            headers: activeHeaders,
+            params,
+            timeout: 12000
+        });
+    } catch (err) {
+        if (err.response?.status === 401) {
+            console.warn('[GOPAY-SESSION] Token 401 Unauthorized dari GoBiz. Mencoba auto-refresh token...');
+            try {
+                await refreshSession();
+                const freshHeaders = await getValidHeaders();
+                response = await axios.get(GOJEK_TRANSACTIONS_URL, {
+                    headers: freshHeaders,
+                    params,
+                    timeout: 12000
+                });
+            } catch (retryErr) {
+                console.error('[GOPAY-SESSION] Gagal auto-refresh setelah 401:', retryErr.response?.data || retryErr.message);
+                throw retryErr;
+            }
+        } else {
+            throw err;
+        }
+    }
 
     const rawList = response.data?.data || response.data?.transactions || response.data || [];
     if (!Array.isArray(rawList)) {

@@ -253,10 +253,10 @@ setInterval(async () => {
     if (pendingItems.length === 0) return;
 
     try {
-        const startTime = new Date(now - 15 * 60 * 1000).toISOString();
+        const startTime = new Date(now - 60 * 60 * 1000).toISOString();
         const transactions = await sessionManager.fetchTransactions({
             startTime,
-            pageSize: 20
+            pageSize: 30
         });
 
         if (!transactions || transactions.length === 0) return;
@@ -270,7 +270,7 @@ setInterval(async () => {
                 if (existingClaim && existingClaim.trxId !== item.trxId) return false;
 
                 const txTime = new Date(tx.transaction_time).getTime();
-                if (txTime < item.createdAt.getTime() - 5 * 60 * 1000) return false;
+                if (txTime < item.createdAt.getTime() - 10 * 60 * 1000) return false;
 
                 return true;
             });
@@ -290,11 +290,11 @@ setInterval(async () => {
                 logActivity('SUCCESS', `Auto-Detector: Pembayaran Masuk Terdeteksi! | TRX: ${item.trxId} | Nominal: ${formatRupiah(item.amount)}`);
 
                 // Otomatis picu pengiriman callback
-                dispatchWebhook(item, matched);
+                await dispatchWebhook(item, matched);
             }
         }
     } catch (err) {
-        // Silent error agar log tidak penuh saat offline
+        console.warn(`[AUTO-DETECTOR] Gagal cek mutasi: ${err.message}`);
     }
 }, 7000);
 
@@ -870,7 +870,7 @@ app.get('/api/qr-status/:id', rateLimiter('status-check', 120, 60 * 1000), async
             }
 
             const txTime = new Date(tx.transaction_time).getTime();
-            if (txTime < qrisItem.createdAt.getTime() - 5 * 60 * 1000) {
+            if (txTime < qrisItem.createdAt.getTime() - 10 * 60 * 1000) {
                 return false;
             }
 
@@ -891,8 +891,8 @@ app.get('/api/qr-status/:id', rateLimiter('status-check', 120, 60 * 1000), async
 
             logActivity('SUCCESS', `Pembayaran LUNAS! | TRX-ID: ${qrisItem.trxId} | Nominal: ${formatRupiah(qrisItem.amount)}`);
 
-            // Kirim Callback Webhook
-            dispatchWebhook(qrisItem, matched);
+            // Kirim Callback Webhook dan tunggu hingga diterima Paymenter
+            await dispatchWebhook(qrisItem, matched);
 
             return res.json({
                 success: true,
