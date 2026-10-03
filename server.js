@@ -455,6 +455,236 @@ app.get('/token-status', apiKeyAuth, async (req, res) => {
 });
 
 // ==========================================
+// 📱 REMOTE GOBIZ LOGIN PORTAL (HP / BROWSER)
+// ==========================================
+
+app.get('/admin/login', (req, res) => {
+    const session = sessionManager.loadSession();
+    const isSessValid = session && !sessionManager.isExpired(session);
+    const expDate = session?.expires_at ? new Date(session.expires_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-';
+    const merchantName = session?.merchant_name || 'Belum Terhubung';
+    const defaultPhone = session?.phone_number || '';
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remote GoBiz Login — SeptaCloud</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px 16px}
+.card{width:100%;max-width:400px;background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:28px 22px}
+h1{font-size:18px;font-weight:700;color:#111;margin-bottom:4px}
+.sub{font-size:12px;color:#777;margin-bottom:16px}
+.status-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-bottom:18px}
+.status-ok{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+.status-bad{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.dot{width:6px;height:6px;border-radius:50%}
+.status-ok .dot{background:#16a34a}
+.status-bad .dot{background:#dc2626}
+.field{margin-bottom:14px;text-align:left}
+label{display:block;font-size:12px;font-weight:600;color:#444;margin-bottom:6px}
+input{width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:14px;color:#111;outline:none}
+input:focus{border-color:#111}
+.btn{display:block;width:100%;padding:11px;background:#111;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px}
+.btn:hover{background:#333}
+.btn:disabled{background:#bbb;cursor:not-allowed}
+.msg{margin-top:12px;font-size:12px;min-height:16px;text-align:center}
+.msg.ok{color:#16a34a}
+.msg.err{color:#dc2626}
+.step-box{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:12px;margin-top:14px}
+.hidden{display:none}
+.meta-box{font-size:11.5px;color:#666;background:#f9f9f9;padding:10px 12px;border-radius:6px;margin-bottom:14px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="status-pill ${isSessValid ? 'status-ok' : 'status-bad'}">
+        <span class="dot"></span> ${isSessValid ? 'Sesi GoBiz Aktif' : 'Sesi Mati / Perlu Login'}
+    </div>
+    <h1>Remote Login GoBiz</h1>
+    <div class="sub">Hubungkan akun GoBiz merchant dari browser tanpa buka SSH terminal.</div>
+
+    <div class="meta-box">
+        <strong>Toko:</strong> ${merchantName}<br>
+        <strong>Kedaluwarsa:</strong> ${expDate}
+    </div>
+
+    <div class="field">
+        <label>Admin Secret Key</label>
+        <input type="password" id="secretKey" placeholder="Kunci API / Admin Key" autocomplete="off" />
+    </div>
+
+    <!-- Step 1: Input Nomor HP -->
+    <div id="step1">
+        <div class="field">
+            <label>Nomor HP GoBiz</label>
+            <input type="tel" id="phoneNumber" placeholder="Contoh: 083847274233" value="${defaultPhone}" />
+        </div>
+        <button class="btn" id="btnReqOtp" onclick="requestOtp()">Minta Kode OTP (SMS/WA)</button>
+    </div>
+
+    <!-- Step 2: Input OTP (Muncul setelah request OTP berhasil) -->
+    <div id="step2" class="step-box hidden">
+        <div class="field">
+            <label>Kode OTP (4 Digit)</label>
+            <input type="text" id="otpCode" maxlength="6" placeholder="Masukkan 4 digit OTP" autocomplete="one-time-code" />
+        </div>
+        <button class="btn" id="btnVerOtp" onclick="verifyOtp()">Verifikasi & Aktifkan Sesi</button>
+    </div>
+
+    <div class="msg" id="alertMsg"></div>
+</div>
+
+<script>
+let curOtpToken = '';
+let curUniqueId = '';
+
+async function requestOtp() {
+    const secret = document.getElementById('secretKey').value.trim();
+    const phone = document.getElementById('phoneNumber').value.trim();
+    const btn = document.getElementById('btnReqOtp');
+    const msg = document.getElementById('alertMsg');
+
+    if (!secret) {
+        msg.className = 'msg err'; msg.textContent = 'Harap isi Admin Secret Key.'; return;
+    }
+    if (!phone) {
+        msg.className = 'msg err'; msg.textContent = 'Harap isi nomor HP GoBiz.'; return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Mengirim OTP...';
+    msg.className = 'msg'; msg.textContent = '';
+
+    try {
+        const res = await fetch('/api/admin/otp/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secret, phone })
+        });
+        const json = await res.json();
+
+        if (json.success) {
+            curOtpToken = json.otp_token;
+            curUniqueId = json.unique_id;
+            document.getElementById('step2').classList.remove('hidden');
+            msg.className = 'msg ok';
+            msg.textContent = json.message || 'OTP berhasil dikirim ke WhatsApp/SMS!';
+            document.getElementById('otpCode').focus();
+        } else {
+            msg.className = 'msg err';
+            msg.textContent = json.message || 'Gagal mengirim OTP.';
+        }
+    } catch (e) {
+        msg.className = 'msg err'; msg.textContent = 'Gagal menghubungi server.';
+    } finally {
+        btn.disabled = false; btn.textContent = 'Minta Kode OTP Lagi';
+    }
+}
+
+async function verifyOtp() {
+    const secret = document.getElementById('secretKey').value.trim();
+    const phone = document.getElementById('phoneNumber').value.trim();
+    const otp = document.getElementById('otpCode').value.trim();
+    const btn = document.getElementById('btnVerOtp');
+    const msg = document.getElementById('alertMsg');
+
+    if (!otp) {
+        msg.className = 'msg err'; msg.textContent = 'Harap masukkan 4 digit kode OTP.'; return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Memverifikasi...';
+
+    try {
+        const res = await fetch('/api/admin/otp/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secret, phone, otp, otp_token: curOtpToken, unique_id: curUniqueId })
+        });
+        const json = await res.json();
+
+        if (json.success) {
+            msg.className = 'msg ok';
+            msg.textContent = '🎉 ' + (json.message || 'Login GoBiz Berhasil! Memuat ulang...');
+            setTimeout(() => { window.location.reload(); }, 2000);
+        } else {
+            msg.className = 'msg err';
+            msg.textContent = json.message || 'Kode OTP salah atau kedaluwarsa.';
+        }
+    } catch (e) {
+        msg.className = 'msg err'; msg.textContent = 'Gagal memverifikasi OTP.';
+    } finally {
+        btn.disabled = false; btn.textContent = 'Verifikasi & Aktifkan Sesi';
+    }
+}
+</script>
+</body>
+</html>`);
+});
+
+app.post('/api/admin/otp/request', rateLimiter('admin-otp-req', 6, 10 * 60 * 1000), async (req, res) => {
+    const { secret, phone } = req.body || {};
+    const configuredKey = process.env.API_KEY || 'gopay_secret_api_key_123456';
+
+    if (!secret || secret !== configuredKey) {
+        return res.status(401).json({ success: false, message: 'Admin Secret Key tidak valid.' });
+    }
+
+    if (!phone) {
+        return res.status(400).json({ success: false, message: 'Nomor HP GoBiz wajib diisi.' });
+    }
+
+    try {
+        logActivity('INFO', `Remote Admin: Meminta OTP GoBiz untuk nomor ${phone}`);
+        const result = await sessionManager.requestOTP(phone);
+        res.json({
+            success: true,
+            otp_token: result.otp_token,
+            unique_id: result.unique_id,
+            expires_in: result.expires_in,
+            message: result.message
+        });
+    } catch (err) {
+        logActivity('WARN', `Remote Admin: Gagal minta OTP: ${err.message}`);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.post('/api/admin/otp/verify', rateLimiter('admin-otp-ver', 8, 10 * 60 * 1000), async (req, res) => {
+    const { secret, phone, otp, otp_token, unique_id } = req.body || {};
+    const configuredKey = process.env.API_KEY || 'gopay_secret_api_key_123456';
+
+    if (!secret || secret !== configuredKey) {
+        return res.status(401).json({ success: false, message: 'Admin Secret Key tidak valid.' });
+    }
+
+    if (!phone || !otp || !otp_token) {
+        return res.status(400).json({ success: false, message: 'Data verifikasi OTP tidak lengkap.' });
+    }
+
+    try {
+        logActivity('INFO', `Remote Admin: Memverifikasi OTP GoBiz untuk nomor ${phone}`);
+        const sessionObj = await sessionManager.verifyOTP(phone, otp, otp_token, unique_id);
+        logActivity('SUCCESS', `Remote Admin: Login GoBiz Berhasil! Toko: ${sessionObj.merchant_name} (${sessionObj.merchant_id})`);
+        res.json({
+            success: true,
+            message: `Login berhasil! Toko ${sessionObj.merchant_name} aktif.`,
+            session: {
+                merchant_name: sessionObj.merchant_name,
+                merchant_id: sessionObj.merchant_id,
+                owner_name: sessionObj.owner_name,
+                expires_at: new Date(sessionObj.expires_at).toISOString()
+            }
+        });
+    } catch (err) {
+        logActivity('ERROR', `Remote Admin: Verifikasi OTP gagal: ${err.message}`);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// ==========================================
 // 3. CREATE DYNAMIC QRIS (DENGAN WEBHOOK / CALLBACK SUPPORT)
 // ==========================================
 
