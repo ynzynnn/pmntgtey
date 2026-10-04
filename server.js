@@ -109,8 +109,18 @@ function loadQRISStoreFromDisk() {
                     createdAt: new Date(v.createdAt),
                     expiresAt: new Date(v.expiresAt)
                 });
+
+                // Anti-Replay: Rekonstruksi transaksi yang sudah diklaim agar server restart tidak mereset daftar klaim
+                if (v.status === 'PAID' && v.transactionData && v.transactionData.transaction_id) {
+                    claimedTransactions.set(v.transactionData.transaction_id, {
+                        trxId: v.trxId,
+                        qrisId: k,
+                        amount: v.amount,
+                        claimedAt: new Date(v.createdAt).getTime()
+                    });
+                }
             }
-            console.log(`[STORAGE] Berhasil memuat ${qrisStore.size} sesi QRIS dari disk.`);
+            console.log(`[STORAGE] Berhasil memuat ${qrisStore.size} sesi QRIS dan ${claimedTransactions.size} transaksi terverifikasi dari disk.`);
         }
     } catch (e) {
         console.warn('[STORAGE] Gagal memuat QRIS store:', e.message);
@@ -271,7 +281,8 @@ setInterval(async () => {
                 if (existingClaim && existingClaim.trxId !== item.trxId) return false;
 
                 const txTime = new Date(tx.transaction_time).getTime();
-                if (txTime < item.createdAt.getTime() - 10 * 60 * 1000) return false;
+                // Toleransi maksimal 60 detik sebelum waktu pembuatan sesi (mengantisipasi jeda clock server)
+                if (txTime < item.createdAt.getTime() - 60 * 1000) return false;
 
                 return true;
             });
@@ -1509,7 +1520,8 @@ app.get('/api/qr-status/:id', rateLimiter('status-check', 120, 60 * 1000), async
             }
 
             const txTime = new Date(tx.transaction_time).getTime();
-            if (txTime < qrisItem.createdAt.getTime() - 10 * 60 * 1000) {
+            // Toleransi maksimal 60 detik sebelum waktu pembuatan sesi (mengantisipasi jeda clock server)
+            if (txTime < qrisItem.createdAt.getTime() - 60 * 1000) {
                 return false;
             }
 
@@ -1575,7 +1587,7 @@ app.all('/check-payment', apiKeyAuth, rateLimiter('api-check-payment', 60, 60 * 
 
     try {
         const now = new Date();
-        const startTime = startTimeParam ? new Date(startTimeParam) : new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const startTime = startTimeParam ? new Date(startTimeParam) : new Date(now.getTime() - 60 * 60 * 1000);
 
         const transactions = await sessionManager.fetchTransactions({
             startTime: startTime.toISOString(),
