@@ -121,7 +121,8 @@ function saveQRISStoreToDisk() {
     try {
         const obj = {};
         for (const [k, v] of qrisStore.entries()) {
-            if (Date.now() - new Date(v.createdAt).getTime() < 24 * 3600 * 1000) {
+            // Simpan riwayat transaksi dan QRIS hingga 7 hari terakhir
+            if (Date.now() - new Date(v.createdAt).getTime() < 7 * 24 * 3600 * 1000) {
                 obj[k] = v;
             }
         }
@@ -536,6 +537,9 @@ input:focus{border-color:#111}
     </div>
 
     <div class="msg" id="alertMsg"></div>
+    <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;text-align:center">
+        <a href="/admin/logs" style="font-size:12px;color:#333;text-decoration:none;font-weight:600">📊 Buka Log Pembayaran & QRIS &rarr;</a>
+    </div>
 </div>
 
 <script>
@@ -682,6 +686,411 @@ app.post('/api/admin/otp/verify', rateLimiter('admin-otp-ver', 8, 10 * 60 * 1000
         logActivity('ERROR', `Remote Admin: Verifikasi OTP gagal: ${err.message}`);
         res.status(500).json({ success: false, message: err.message });
     }
+});
+
+// ==========================================
+// 📊 FITUR LOG PEMBAYARAN & QRIS DIBUAT
+// ==========================================
+
+function getLogsData() {
+    const allQris = [];
+    const payments = [];
+    let totalRevenue = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    let totalExpired = 0;
+
+    const now = Date.now();
+
+    for (const [qrisId, item] of qrisStore.entries()) {
+        const isExpired = item.status === 'PENDING' && now > new Date(item.expiresAt).getTime();
+        const displayStatus = isExpired ? 'EXPIRED' : item.status;
+
+        const qrisRecord = {
+            qris_id: qrisId,
+            trx_id: item.trxId,
+            order_id: item.orderId || '-',
+            amount: item.amount,
+            status: displayStatus,
+            created_at: item.createdAt,
+            expires_at: item.expiresAt,
+            pay_url: `/pay/${qrisId}`,
+            webhook_url: item.webhookUrl || null,
+            webhook_delivered: !!item.webhookDelivered
+        };
+        allQris.push(qrisRecord);
+
+        if (item.status === 'PAID') {
+            totalRevenue += item.amount;
+            totalPaid++;
+            payments.push({
+                qris_id: qrisId,
+                trx_id: item.trxId,
+                order_id: item.orderId || '-',
+                amount: item.amount,
+                settled_at: item.transactionData?.settlement_time || item.transactionData?.transaction_time || item.createdAt,
+                payer_issuer: item.transactionData?.payer_issuer || item.transactionData?.payment_method || 'QRIS',
+                transaction_id: item.transactionData?.transaction_id || '-',
+                payment_type: item.transactionData?.payment_type || 'QRIS',
+                webhook_delivered: !!item.webhookDelivered,
+                webhook_url: item.webhookUrl || null
+            });
+        } else if (displayStatus === 'PENDING') {
+            totalPending++;
+        } else {
+            totalExpired++;
+        }
+    }
+
+    allQris.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    payments.sort((a, b) => new Date(b.settled_at) - new Date(a.settled_at));
+
+    return {
+        summary: {
+            total_revenue: totalRevenue,
+            total_paid: totalPaid,
+            total_pending: totalPending,
+            total_expired: totalExpired,
+            total_qris: allQris.length
+        },
+        payments,
+        qris: allQris
+    };
+}
+
+// 1. API Endpoint JSON untuk Log
+app.get('/api/admin/logs', rateLimiter('admin-logs-api', 60, 60 * 1000), (req, res) => {
+    const configuredKey = process.env.API_KEY || 'gopay_secret_api_key_123456';
+    const clientKey = req.headers['x-api-key'] || req.query.secret || req.query.api_key;
+
+    if (!clientKey || clientKey !== configuredKey) {
+        return res.status(401).json({ success: false, message: 'Admin Secret Key tidak valid atau tidak disertakan.' });
+    }
+
+    const data = getLogsData();
+    res.json({ success: true, data });
+});
+
+// 2. Web Portal Dashboard Log (Tampilan Polosan & Minimalis)
+app.get('/admin/logs', (req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log Pembayaran & QRIS — SeptaCloud</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#222;padding:20px 16px;min-height:100vh}
+.container{max-width:880px;margin:0 auto}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.brand{font-size:18px;font-weight:700;color:#111}
+.nav-links{display:flex;gap:10px;font-size:12px}
+.nav-links a{color:#555;text-decoration:none;padding:6px 12px;background:#fff;border:1px solid #e0e0e0;border-radius:6px}
+.nav-links a:hover{color:#000;border-color:#bbb}
+
+/* Auth Card */
+.auth-box{background:#fff;border:1px solid #e0e0e0;border-radius:12px;padding:24px;text-align:center;max-width:400px;margin:40px auto}
+.auth-box input{width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:14px;margin:12px 0;outline:none}
+.auth-box button{width:100%;padding:10px;background:#111;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+.auth-box button:hover{background:#333}
+
+/* Stats Cards */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:16px;text-align:left}
+.stat-card .lbl{font-size:11px;color:#777;text-transform:uppercase;font-weight:600;margin-bottom:4px}
+.stat-card .val{font-size:20px;font-weight:800;color:#111}
+.stat-card.green .val{color:#16a34a}
+.stat-card.yellow .val{color:#d97706}
+
+/* Toolbar & Tabs */
+.toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
+.tabs{display:flex;gap:8px}
+.tab-btn{padding:8px 14px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#555}
+.tab-btn.active{background:#111;color:#fff;border-color:#111}
+.actions{display:flex;align-items:center;gap:10px}
+.btn-refresh{padding:8px 12px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#333}
+.btn-refresh:hover{background:#f9f9f9}
+.auto-poll{font-size:11.5px;color:#666;display:flex;align-items:center;gap:5px;cursor:pointer}
+
+/* Table / Card List */
+.data-card{background:#fff;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px;text-align:left}
+th{background:#fafafa;padding:12px 14px;font-weight:600;color:#555;border-bottom:1px solid #eee}
+td{padding:12px 14px;border-bottom:1px solid #f0f0f0;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafafa}
+
+/* Badges */
+.badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:10.5px;font-weight:700}
+.badge-paid{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+.badge-pending{background:#fefce8;color:#ca8a04;border:1px solid #fef08a}
+.badge-expired{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.badge-issuer{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;font-weight:600}
+.badge-wh-ok{background:#f0fdf4;color:#16a34a}
+.badge-wh-fail{background:#fef2f2;color:#dc2626}
+
+.empty-state{padding:40px;text-align:center;color:#888;font-size:13px}
+.link-btn{color:#111;text-decoration:none;font-weight:600;font-size:11.5px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;display:inline-block}
+.link-btn:hover{background:#eee}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div class="brand">⚡ SeptaCloud Gateway — Log Transaksi</div>
+        <div class="nav-links">
+            <a href="/admin/login">📱 Remote GoBiz Login</a>
+            <a href="/">🏠 Home</a>
+            <a href="#" onclick="logout()">Keluar</a>
+        </div>
+    </div>
+
+    <!-- Login View (Jika Belum Auth) -->
+    <div id="authView" class="auth-box">
+        <h2 style="font-size:16px;margin-bottom:6px">Kunci Akses Admin</h2>
+        <p style="font-size:12px;color:#777">Masukkan Admin Secret Key untuk membuka log pembayaran dan QRIS.</p>
+        <input type="password" id="secretInput" placeholder="Masukkan API Key / Secret" />
+        <button onclick="loginWithSecret()">Buka Log Transaksi</button>
+        <div id="authMsg" style="font-size:12px;color:#dc2626;margin-top:10px"></div>
+    </div>
+
+    <!-- Main Dashboard View -->
+    <div id="dashboardView" class="hidden">
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card green">
+                <div class="lbl">Total Omset (Lunas)</div>
+                <div class="val" id="statRevenue">Rp 0</div>
+            </div>
+            <div class="stat-card green">
+                <div class="lbl">Transaksi Lunas</div>
+                <div class="val" id="statPaid">0</div>
+            </div>
+            <div class="stat-card yellow">
+                <div class="lbl">QRIS Pending</div>
+                <div class="val" id="statPending">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="lbl">Total QRIS Dibuat</div>
+                <div class="val" id="statTotalQris">0</div>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="tabs">
+                <button class="tab-btn active" id="tabPayments" onclick="switchTab('payments')">💰 Pembayaran Masuk (<span id="countPayments">0</span>)</button>
+                <button class="tab-btn" id="tabQris" onclick="switchTab('qris')">📱 QRIS Dibuat (<span id="countQris">0</span>)</button>
+            </div>
+            <div class="actions">
+                <label class="auto-poll">
+                    <input type="checkbox" id="autoPollCheck" onchange="toggleAutoPoll()" checked /> Auto-Refresh (8s)
+                </label>
+                <button class="btn-refresh" onclick="fetchLogs()">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <!-- Tab 1: Pembayaran Masuk -->
+        <div id="panelPayments" class="data-card">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Waktu (WIB)</th>
+                            <th>Nominal</th>
+                            <th>Order ID</th>
+                            <th>Metode / E-Wallet</th>
+                            <th>ID Transaksi GoBiz</th>
+                            <th>Webhook Callback</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyPayments"></tbody>
+                </table>
+            </div>
+            <div id="emptyPayments" class="empty-state hidden">Belum ada pembayaran masuk yang lunas.</div>
+        </div>
+
+        <!-- Tab 2: QRIS Dibuat -->
+        <div id="panelQris" class="data-card hidden">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Waktu Dibuat</th>
+                            <th>Nominal</th>
+                            <th>Order / TRX ID</th>
+                            <th>Status</th>
+                            <th>Kedaluwarsa</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyQris"></tbody>
+                </table>
+            </div>
+            <div id="emptyQris" class="empty-state hidden">Belum ada riwayat QRIS yang dibuat.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentTab = 'payments';
+let pollInterval = null;
+
+function getSavedSecret() {
+    return localStorage.getItem('gopay_admin_secret') || new URLSearchParams(window.location.search).get('secret') || '';
+}
+
+function formatRupiah(num) {
+    return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
+}
+
+function formatDate(isoStr) {
+    if (!isoStr) return '-';
+    const d = new Date(isoStr);
+    return d.toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }) + ' WIB';
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tabPayments').classList.toggle('active', tab === 'payments');
+    document.getElementById('tabQris').classList.toggle('active', tab === 'qris');
+    document.getElementById('panelPayments').classList.toggle('hidden', tab !== 'payments');
+    document.getElementById('panelQris').classList.toggle('hidden', tab !== 'qris');
+}
+
+function loginWithSecret() {
+    const val = document.getElementById('secretInput').value.trim();
+    if (!val) {
+        document.getElementById('authMsg').textContent = 'Kunci akses wajib diisi.';
+        return;
+    }
+    localStorage.setItem('gopay_admin_secret', val);
+    fetchLogs();
+}
+
+function logout() {
+    localStorage.removeItem('gopay_admin_secret');
+    if (pollInterval) clearInterval(pollInterval);
+    document.getElementById('dashboardView').classList.add('hidden');
+    document.getElementById('authView').classList.remove('hidden');
+}
+
+async function fetchLogs() {
+    const secret = getSavedSecret();
+    if (!secret) {
+        document.getElementById('dashboardView').classList.add('hidden');
+        document.getElementById('authView').classList.remove('hidden');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/admin/logs?secret=' + encodeURIComponent(secret));
+        const json = await res.json();
+
+        if (!json.success) {
+            document.getElementById('authView').classList.remove('hidden');
+            document.getElementById('dashboardView').classList.add('hidden');
+            document.getElementById('authMsg').textContent = json.message || 'Secret Key salah.';
+            return;
+        }
+
+        document.getElementById('authView').classList.add('hidden');
+        document.getElementById('dashboardView').classList.remove('hidden');
+
+        renderDashboard(json.data);
+    } catch (e) {
+        console.error('Gagal mengambil log:', e);
+    }
+}
+
+function renderDashboard(data) {
+    const sum = data.summary || {};
+    document.getElementById('statRevenue').textContent = formatRupiah(sum.total_revenue);
+    document.getElementById('statPaid').textContent = sum.total_paid || 0;
+    document.getElementById('statPending').textContent = sum.total_pending || 0;
+    document.getElementById('statTotalQris').textContent = sum.total_qris || 0;
+
+    const payments = data.payments || [];
+    document.getElementById('countPayments').textContent = payments.length;
+    const tbodyP = document.getElementById('tbodyPayments');
+    tbodyP.innerHTML = '';
+
+    if (payments.length === 0) {
+        document.getElementById('emptyPayments').classList.remove('hidden');
+    } else {
+        document.getElementById('emptyPayments').classList.add('hidden');
+        payments.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = \`
+                <td style="color:#666">\${formatDate(p.settled_at)}</td>
+                <td style="font-weight:700;color:#16a34a">\${formatRupiah(p.amount)}</td>
+                <td style="font-weight:600">\${p.order_id}</td>
+                <td><span class="badge badge-issuer">\${p.payer_issuer}</span></td>
+                <td style="font-family:monospace;font-size:11px;color:#555">\${p.transaction_id}</td>
+                <td>
+                    \${p.webhook_delivered 
+                        ? '<span class="badge badge-paid">✅ Terkirim</span>' 
+                        : (p.webhook_url ? '<span class="badge badge-pending">⏳ Belum Terkirim</span>' : '<span style="color:#999">-</span>')}
+                </td>
+            \`;
+            tbodyP.appendChild(tr);
+        });
+    }
+
+    const qrisList = data.qris || [];
+    document.getElementById('countQris').textContent = qrisList.length;
+    const tbodyQ = document.getElementById('tbodyQris');
+    tbodyQ.innerHTML = '';
+
+    if (qrisList.length === 0) {
+        document.getElementById('emptyQris').classList.remove('hidden');
+    } else {
+        document.getElementById('emptyQris').classList.add('hidden');
+        qrisList.forEach(q => {
+            const badgeClass = q.status === 'PAID' ? 'badge-paid' : (q.status === 'PENDING' ? 'badge-pending' : 'badge-expired');
+            const tr = document.createElement('tr');
+            tr.innerHTML = \`
+                <td style="color:#666">\${formatDate(q.created_at)}</td>
+                <td style="font-weight:700">\${formatRupiah(q.amount)}</td>
+                <td><strong>\${q.order_id}</strong><br><span style="font-size:10.5px;color:#888">\${q.trx_id}</span></td>
+                <td><span class="badge \${badgeClass}">\${q.status}</span></td>
+                <td style="font-size:11.5px;color:#777">\${formatDate(q.expires_at)}</td>
+                <td><a href="\${q.pay_url}" target="_blank" class="link-btn">Lihat QR ↗</a></td>
+            \`;
+            tbodyQ.appendChild(tr);
+        });
+    }
+}
+
+function toggleAutoPoll() {
+    const isChecked = document.getElementById('autoPollCheck').checked;
+    if (isChecked) {
+        if (!pollInterval) pollInterval = setInterval(fetchLogs, 8000);
+    } else {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+}
+
+// Inisialisasi awal
+const saved = getSavedSecret();
+if (saved) {
+    fetchLogs();
+    toggleAutoPoll();
+} else {
+    document.getElementById('authView').classList.remove('hidden');
+}
+</script>
+</body>
+</html>`);
 });
 
 // ==========================================
