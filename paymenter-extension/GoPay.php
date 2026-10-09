@@ -149,8 +149,9 @@ class GoPay extends Gateway
 
         // 3. Tandai Invoice Lunas di Paymenter & Aktifkan Layanan Otomatis
         try {
-            ExtensionHelper::paymentDone($invoice->id, 'GoPay', $data['transaction_id'] ?? $trxId);
-            Log::info("GoPay Webhook: Invoice #{$invoiceId} berhasil dibayar lunas via GoPay / {$data['payer_issuer']}");
+            $finalTrxId = !empty($data['trx_id']) ? $data['trx_id'] : ($data['transaction_id'] ?? ('TRX-' . strtoupper(substr(md5($invoiceId . time()), 0, 8))));
+            ExtensionHelper::paymentDone($invoice->id, 'GoPay', $finalTrxId);
+            Log::info("GoPay Webhook: Invoice #{$invoiceId} berhasil dibayar lunas via GoPay / {$data['payer_issuer']} | TRX: {$finalTrxId}");
             return response()->json(['status' => 'success']);
         } catch (\Exception $e) {
             Log::error("GoPay Webhook PaymentDone Error: " . $e->getMessage());
