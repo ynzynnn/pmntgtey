@@ -284,7 +284,8 @@ class GoPay extends Gateway
 
                 if ($response->successful()) {
                     $json = $response->json();
-                    if (($json['success'] ?? false) || ($json['status'] ?? '') === 'PAID' || ($json['data']['status'] ?? '') === 'PAID') {
+                    // KRUSIAL: Wajib cek $json['paid'] === true, JANGAN cek $json['success'] karena success: true hanya status respon HTTP!
+                    if (!empty($json['paid']) && $json['paid'] === true) {
                         $isPaid = true;
                         $matchedTxId = $json['data']['trx_id'] ?? ($json['trx_id'] ?? ($cached['trx_id'] ?? $trxId));
                     }
@@ -299,7 +300,8 @@ class GoPay extends Gateway
 
                     if ($res2->successful()) {
                         $json2 = $res2->json();
-                        if (($json2['data']['status'] ?? '') === 'PAID' || ($json2['status'] ?? '') === 'PAID') {
+                        // KRUSIAL: Wajib cek paid === true dan status === PAID (jangan terima jika PENDING atau EXPIRED)
+                        if (!empty($json2['paid']) && $json2['paid'] === true && (($json2['status'] ?? '') === 'PAID' || ($json2['data']['status'] ?? '') === 'PAID')) {
                             $isPaid = true;
                             $matchedTxId = $json2['data']['trx_id'] ?? ($json2['trx_id'] ?? ($cached['trx_id'] ?? $trxId));
                         }
